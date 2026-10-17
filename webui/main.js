@@ -7,9 +7,16 @@ let state = {
   audioContext: undefined
 };
 
+function formatTime(value) {
+  let time = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  let hours = String(Math.floor(time / 3600)).padStart(2, "0");
+  let minutes = String(Math.floor(time % 3600 / 60)).padStart(2, "0");
+  let seconds = String(time % 60).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
 function updateDisplay() {
   document.querySelectorAll(".directory").forEach(function (element) {
-    console.log(state.audioPath, element.dataset.path);
     if (state.audioPath && state.audioPath.startsWith(element.dataset.path + "/")) {
       element.dataset.state = "play";
     } else {
@@ -18,11 +25,27 @@ function updateDisplay() {
   });
 
   document.querySelectorAll("x-track").forEach(function (element) {
+    let timeline = element.querySelector("x-track-timeline");
+    let timelinePosition = timeline.querySelector("x-track-timeline-position");
+    let timelineDuration = timeline.querySelector("x-track-timeline-duration");
+
     if (state.audioPath && element.dataset.path == state.audioPath) {
       element.dataset.state = "play";
+      if (state.audio && Number.isFinite(state.audio.duration)) {
+        element.dataset.duration = state.audio.duration;
+      }
+      timelinePosition.textContent = formatTime(state.audio ? state.audio.currentTime : 0);
+      let progress = state.audio && Number.isFinite(state.audio.duration) && state.audio.duration > 0
+        ? state.audio.currentTime / state.audio.duration * 100
+        : 0;
+      timeline.style.setProperty("--progress", progress + "%");
     } else {
       element.dataset.state = "start";
+      timelinePosition.textContent = formatTime(0);
+      timeline.style.setProperty("--progress", "0%");
     }
+
+    timelineDuration.textContent = formatTime(Number(element.dataset.duration));
   })
 }
 
@@ -47,6 +70,18 @@ async function playTrack(path) {
   state.audioSource = state.audioContext.createMediaElementSource(state.audio);
   state.audioSource.connect(state.audioContext.destination);
 
+  let audio = state.audio;
+  audio.addEventListener("durationchange", function () {
+    if (state.audio === audio) {
+      updateDisplay();
+    }
+  });
+  audio.addEventListener("timeupdate", function () {
+    if (state.audio === audio) {
+      updateDisplay();
+    }
+  });
+
   try {
     await state.audioContext.resume();
     await state.audio.play();
@@ -58,7 +93,6 @@ async function playTrack(path) {
 }
 
 async function fetchFileList(path = "") {
-  console.log(path);
   let res = await fetch(`/api/list?path=${encodeURIComponent(path)}`);
   if (!res.ok) {
     alert("Failed to list directory");
@@ -89,6 +123,15 @@ function renderTrack(element) {
   var playButton = document.createElement("button");
   var playIcon = document.createElement("img");
   var timeline = document.createElement("x-track-timeline");
+  var timelinePosition = document.createElement("x-track-timeline-position");
+  var timelineDuration = document.createElement("x-track-timeline-duration");
+  var timelineCursor = document.createElement("x-track-timeline-cursor");
+  var timelineCursorLabel = document.createElement("x-track-timeline-cursor-label");
+
+  timelinePosition.textContent = formatTime(0);
+  timelineDuration.textContent = formatTime(0);
+  timelineCursor.append(timelineCursorLabel);
+  timeline.append(timelinePosition, timelineDuration, timelineCursor);
 
   release.textContent = element.dataset.release || "";
   title.textContent = element.dataset.title || "";
@@ -101,6 +144,32 @@ function renderTrack(element) {
 
   control.addEventListener("click", async function () {
     await playTrack(element.dataset.path);
+  });
+
+  timeline.addEventListener("click", function (event) {
+    if (state.audioPath !== element.dataset.path || !state.audio || !Number.isFinite(state.audio.duration)) {
+      return;
+    }
+
+    let bounds = timeline.getBoundingClientRect();
+    if (bounds.width === 0) {
+      return;
+    }
+
+    let position = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
+    state.audio.currentTime = position / bounds.width * state.audio.duration;
+    updateDisplay();
+  });
+
+  timeline.addEventListener("mousemove", function (event) {
+    let bounds = timeline.getBoundingClientRect();
+    let position = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
+    timelineCursor.style.left = position + "px";
+
+    if (state.audioPath === element.dataset.path && state.audio && Number.isFinite(state.audio.duration) && bounds.width > 0) {
+      timelineCursorLabel.textContent = formatTime(position / bounds.width * state.audio.duration);
+      timelineCursorLabel.dataset.position = position < bounds.width / 2 ? "left" : "right";
+    }
   });
 
   control.append(playButton);
