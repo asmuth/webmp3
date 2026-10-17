@@ -238,6 +238,16 @@ async function renderBrowser(path) {
   updateDisplay();
 }
 
-if (document.querySelector("main")) {
-  renderBrowser(document.location.pathname === "/" ? "" : decodeURIComponent(document.location.pathname));
+function displayPage(path) {
+  if (path.endsWith("/")) {
+    path = path.slice(0,  -1);
+  }
+
+  renderBrowser(path);
 }
+
+displayPage(decodeURIComponent(document.location.pathname));
+
+window.addEventListener("popstate", function () {
+  displayPage(decodeURIComponent(document.location.pathname));
+});
