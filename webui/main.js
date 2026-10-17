@@ -81,6 +81,16 @@ async function playTrack(path) {
       updateDisplay();
     }
   });
+  audio.addEventListener("ended", function () {
+    if (state.audio === audio) {
+      state.audioPath = undefined;
+      state.audioSource.disconnect();
+      state.audioSource = undefined;
+      state.audio = undefined;
+      updateDisplay();
+      playNextTrack(path);
+    }
+  });
 
   try {
     await state.audioContext.resume();
@@ -90,6 +100,17 @@ async function playTrack(path) {
   }
 
   updateDisplay();
+}
+
+async function playNextTrack(pathPrev) {
+  let tracks = Array.from(document.querySelectorAll("x-track"));
+  let indexPrev = tracks.findIndex(function (element) {
+    return element.dataset.path === pathPrev;
+  });
+
+  if (indexPrev >= 0 && indexPrev + 1 < tracks.length) {
+    await playTrack(tracks[indexPrev + 1].dataset.path);
+  }
 }
 
 async function fetchFileList(path = "") {
